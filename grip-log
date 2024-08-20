@@ -1,0 +1,31 @@
+#!/usr/bin/env python3
+
+import sys
+import os
+from helpers import verifyGrip, getDir, fetchGenInfo
+
+# grip-log is my implementation of the grip-log command.
+# Edwin Tang (z5482091)
+# Implementation ===============================================================
+
+grip = '.grip'
+commitDir = '.grip/commits'
+
+
+if __name__ == "__main__":
+    # Verifying that grip directory exists
+    verifyGrip(sys.argv[0])
+    currBranch = fetchGenInfo()
+    # Verifying command line arguments
+    if len(sys.argv) > 1:
+        print("usage: grip-log", file=sys.stderr)
+        sys.exit(1)
+    if not os.path.exists(currBranch):
+        sys.exit()
+    directories = getDir(currBranch)
+    directories.sort(reverse=True)
+    for i in directories:
+        message = ""
+        with open(f"{currBranch}/{i}/_MESSAGE_", 'r') as f:
+            message = f.read()
+        print(f"{i} {message}")

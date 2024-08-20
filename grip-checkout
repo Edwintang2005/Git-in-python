@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+
+import sys
+import os
+import filecmp
+import shutil
+from helpers import verifyGrip, fetchGenInfo, getDir, writeGenInfo, getFiles, eprint
+
+# grip-checkout is my implementation of the grip-checkout command.
+# Edwin Tang (z5482091)
+# Implementation ===============================================================
+
+commitDir = '.grip/commits'
+currState = '.grip/curr'
+
+
+if __name__ == "__main__":
+    # Verifying that grip directory exists
+    verifyGrip(sys.argv[0])
+    currBranch = fetchGenInfo()
+    branches = sorted(getDir(commitDir))
+    if len(branches) == 0:
+        eprint(sys.argv[0], f"this command can not be run until after the first commit")
+        sys.exit(1)
+    # Ensuring arguments are valid
+    if len(sys.argv) != 2:
+        print(f"usage: {os.path.basename(sys.argv[0])} <branch>", file=sys.stderr)
+        sys.exit(1)
+    if sys.argv[1] not in branches:
+        eprint(sys.argv[0], f"unknown branch '{sys.argv[1]}'")
+        sys.exit(1)
+    if sys.argv[1] == os.path.basename(currBranch):
+        print(f"Already on '{sys.argv[1]}'")
+        sys.exit(0)
+    # At this point, should be good to switch branches
+    # Working with latest commit on current branch
+    latestCommit = sorted(getDir(currBranch), reverse=True)[0]
+    latestCommitPath = f"{currBranch}/{latestCommit}"
+    # Working with latest commit on target branch
+    targetBranch = f"{commitDir}/{sys.argv[1]}"
+    latestCommit = sorted(getDir(targetBranch), reverse=True)[0]
+    # Determining any unsaved changes that would be removed
+    diffObject = filecmp.dircmp(latestCommitPath, '.', ignore=['_MESSAGE_'])
+    diffFiles = diffObject.diff_files
+    diffObject = filecmp.dircmp(latestCommitPath, f"{targetBranch}/{latestCommit}", ignore=['_MESSAGE_'])
+    diffFiles += diffObject.right_only
+    diffFiles = sorted(diffFiles)
+    # Checking for differences
+    toRemove = []
+    for i in diffFiles:
+        targetFile = f"{targetBranch}/{latestCommit}/{i}"
+        if not os.path.exists(i):
+            toRemove.append(i)
+        elif not os.path.exists(f"{latestCommitPath}/{i}"):
+            if filecmp.cmp(i, targetFile, shallow=True):
+                toRemove.append(i)
+        elif os.path.exists(targetFile):
+            if filecmp.cmp(f"{latestCommitPath}/{i}", targetFile, shallow=True):
+                toRemove.append(i)
+    # Some makeshift removal method cuz apparantly you can't remove from a list when iter through??
+    for i in toRemove:
+        diffFiles.remove(i)
+    if len(diffFiles) != 0:
+        eprint(sys.argv[0], f"Your changes to the following files would be overwritten by checkout:")
+        for i in diffFiles:
+            print(i)
+        sys.exit(1)
+    branchFiles = getFiles(f"{targetBranch}/{latestCommit}")
+    commitFiles = getFiles(latestCommitPath)
+    indexFiles = getFiles(currState)
+    for i in branchFiles:
+        targetFile = f"{targetBranch}/{latestCommit}/{i}"
+        if i == '_MESSAGE_':
+            continue
+        if os.path.exists(i) and filecmp.cmp(i, targetFile, shallow=True):
+            continue
+        elif os.path.exists(f"{latestCommitPath}/{i}"):
+            if filecmp.cmp(f"{latestCommitPath}/{i}", targetFile, shallow=True):
+                if os.path.exists(i):
+                    continue
+        if os.path.exists(i):
+            os.remove(i)
+        shutil.copy(targetFile, i)
+        # Updating index
+        if os.path.exists(f"{currState}/{i}"):
+            os.remove(f"{currState}/{i}")
+        shutil.copy(targetFile, f"{currState}/{i}")
+    for i in commitFiles:
+        if i in branchFiles:
+            continue
+        os.remove(i)
+    for i in indexFiles:
+        if i in branchFiles:
+            continue
+        os.remove(f"{currState}/{i}")
+    writeGenInfo(targetBranch)
+    print(f"Switched to branch '{sys.argv[1]}'")

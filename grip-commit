@@ -1,0 +1,75 @@
+#!/usr/bin/env python3
+
+import sys
+import os
+import shutil
+import filecmp
+import re
+from helpers import verifyGrip, ArgumentParser, getFiles, getDir, getCommits, fetchGenInfo
+
+# grip-commit is my implementation of the grip-commit command.
+# Edwin Tang (z5482091)
+# Implementation ===============================================================
+
+grip = '.grip'
+commitDir = '.grip/commits'
+currState = '.grip/curr'
+
+
+if __name__ == "__main__":
+    # Verifying that grip directory exists
+    verifyGrip(sys.argv[0])
+    currBranch = fetchGenInfo()
+    # Parsing arguments
+    parser = ArgumentParser(usage="%(prog)s [-a] -m commit-message", add_help=False)
+    parser.add_argument('-a', action='store_true')
+    parser.add_argument('-m', required=True)
+
+    arguments = parser.parse_args()
+    message = arguments.m
+    if re.search(r"^\s*$", message):
+        print(f"usage: {os.path.basename(sys.argv[0])} [-a] -m commit-message", file=sys.stderr)
+        sys.exit(1)
+    # Checking if -a was called
+    if arguments.a:
+        files = getFiles(currState)
+        for i in files:
+            # File doesn't exist in curr dir
+            if not os.path.exists(i):
+                os.remove(f"{currState}/{i}")
+            elif filecmp.cmp(i, f"{currState}/{i}", shallow=True):
+                continue
+            os.remove(f"{currState}/{i}")
+            shutil.copy(i, f"{currState}/{i}")
+    files = list(map(lambda x: os.path.basename(x), getCommits(commitDir)))
+    files = list(set(files))
+    if os.path.exists(currBranch):
+        branchFiles = sorted(getDir(currBranch), reverse=True)
+        latestCommitDir = currBranch + '/' + branchFiles[0]
+        newCommitDir = currBranch + '/' + str(len(files))
+        if len(files) != 0:
+            diffObject = filecmp.dircmp(latestCommitDir, currState, ignore=['_MESSAGE_'])
+            diffFiles = diffObject.diff_files + diffObject.left_only + diffObject.right_only
+            # Checking for differences
+            if len(diffFiles) == 0:
+                print("nothing to commit")
+                sys.exit()
+        elif len(files) == 0 and len(getFiles(currState)) == 0:
+            print("nothing to commit")
+            sys.exit()
+    else:
+        if len(getFiles(currState)) == 0:
+            print("nothing to commit")
+            sys.exit()
+        os.mkdir(currBranch)
+        newCommitDir = currBranch + '/' + str(len(files))
+    try:
+        shutil.copytree(currState, newCommitDir)
+        print(f"Committed as commit {len(files)}")
+        with open(f"{newCommitDir}/_MESSAGE_", 'w') as f:
+            f.write(message)
+    except Exception as e:
+        print(f"copy failed: {e}")
+        sys.exit(1)
+    
+    

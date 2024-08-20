@@ -1,0 +1,60 @@
+#!/usr/bin/env python3
+
+import sys
+import os
+import re
+from helpers import verifyGrip, ArgumentParser, getDir, tripleFileCmp, fetchGenInfo, eprint
+
+# grip-rm is my implementation of the grip-rm command.
+# Edwin Tang (z5482091)
+# Implementation ===============================================================
+
+commitDir = '.grip/commits'
+currState = '.grip/curr'
+
+
+if __name__ == "__main__":
+    # Verifying that grip directory exists
+    verifyGrip(sys.argv[0])
+    currBranch = fetchGenInfo()
+    # Parsing arguments passed into function and ensuring correct format
+    parser = ArgumentParser(usage="%(prog)s [--force] [--cached] <filenames>", add_help=False)
+    parser.add_argument('--force', action='store_true')
+    parser.add_argument('--cached', action='store_true')
+    parser.add_argument('filenames', action='extend', nargs='+')
+    arguments = parser.parse_args()
+    removedFiles = arguments.filenames
+    # Finding latest commit
+    if os.path.exists(currBranch):
+        latestCommit = getDir(currBranch)
+        latestCommit.sort(reverse=True)
+        latestCommit = latestCommit[0]
+    else:
+        latestCommit = None
+    # Verifying file names
+    for i in removedFiles:
+        # Verifying the file name
+        if not re.search("^[a-zA-Z0-9][-a-zA-Z0-9\._]*$", i):
+            eprint(sys.argv[0], f"invalid filename '{i}'")
+            sys.exit(1)
+        # Checking if file is in directory
+        if not os.path.exists(f"{currState}/{i}"):
+            eprint(sys.argv[0], f"'{i}' is not in the grip repository")
+            sys.exit(1)
+        if not arguments.force:
+            indexPath = f"{currState}/{i}"
+            latestCommitPath = f"{currBranch}/{latestCommit}/{i}"
+            compareResult = tripleFileCmp(i, indexPath, latestCommitPath, arguments.cached)
+            if compareResult:
+                eprint(sys.argv[0], f"{compareResult}")
+                sys.exit(1)
+    # Removing files from index
+    for i in removedFiles:
+        if os.path.exists(f"{currState}/{i}"):
+            os.remove(f"{currState}/{i}")
+    if arguments.cached:
+        sys.exit()
+    # Removing files from cwd:
+    for i in removedFiles:
+        if os.path.exists(i):
+            os.remove(i)

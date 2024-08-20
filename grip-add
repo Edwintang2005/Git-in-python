@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+
+import sys
+import os
+import shutil
+import re
+import filecmp
+from helpers import verifyGrip, getFiles, eprint
+
+# grip-add is my implementation of the grip-add command.
+# Edwin Tang (z5482091)
+# Implementation ===============================================================
+
+grip = '.grip'
+currState = '.grip/curr'
+
+if __name__ == "__main__":
+    # Verifying that grip directory exists
+    verifyGrip(sys.argv[0])
+    # Verifying that there is one or more arguments
+    if len(sys.argv) < 2:
+        print("usage: grip-add <filenames>", file=sys.stderr)
+        sys.exit(1)
+    # Getting all files in index directory
+    files = getFiles(f"{currState}/")
+    # Going through command line arguments to determine which files to add
+    # Validating all files
+    for index in range(1, len(sys.argv)):
+        source = sys.argv[index]
+        # Verifying the file name
+        if not re.search("^[a-zA-Z0-9][-a-zA-Z0-9\._]*$", sys.argv[index]):
+            eprint(sys.argv[0], f"invalid filename '{sys.argv[index]}'")
+            sys.exit(1)
+        # Verifying file is a normal file
+        if source in files and not os.path.exists(source):
+            continue
+        if not os.path.exists(source):
+            eprint(sys.argv[0], f"can not open '{source}'")
+            sys.exit(1)
+        elif not os.path.isfile(source):
+            eprint(sys.argv[0], f"'{source}' is not a regular file")
+            sys.exit(1)
+        elif not os.access(source, os.R_OK):
+            eprint(sys.argv[0], f"can not open '{source}'")
+            sys.exit(1)
+    # Implementing add procedures
+    for index in range(1, len(sys.argv)):
+        source = sys.argv[index]
+        if source in files and not os.path.exists(source):
+            os.remove(f"{currState}/{source}")
+            continue
+        destination = f'{currState}/{source}'
+        # Copying to the currState directory
+        try:
+            if os.path.exists(destination):
+                if filecmp.cmp(source, destination, shallow=True):
+                    continue
+                os.remove(destination)
+            shutil.copy(source, destination)
+        except:
+            eprint(sys.argv[0], f"could not copying file.")
+            sys.exit(1)
+
+        

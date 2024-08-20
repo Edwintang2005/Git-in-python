@@ -1,0 +1,44 @@
+#!/usr/bin/env python3
+
+import sys
+import os
+from helpers import verifyGrip, getDir, getFiles, determineStatus, fetchGenInfo
+
+# grip-status is my implementation of the grip-status command.
+# Edwin Tang (z5482091)
+# Implementation ===============================================================
+
+commitDir = '.grip/commits'
+currState = '.grip/curr'
+
+
+if __name__ == "__main__":
+    # Verifying that grip directory exists
+    verifyGrip(sys.argv[0])
+    currBranch = fetchGenInfo()
+    # Verifying the number of command line arguments
+    if len(sys.argv) != 1:
+        print("usage: grip-status", file=sys.stderr)
+        sys.exit(1)
+    # Getting all files tracked in commits and the location of its latest version
+    commitFiles = {}
+    # Getting the latest commit
+    tmpcommitList = sorted(getDir(currBranch), reverse=True) if os.path.exists(currBranch) else []
+    if len(tmpcommitList) != 0:
+        i = tmpcommitList[0]
+        for file in getFiles(f"{currBranch}/{i}"):
+            if file == '_MESSAGE_':
+                continue
+            if not commitFiles.get(file):
+                commitFiles[file] = f"{currBranch}/{i}/{file}"
+    indexFiles = getFiles(currState)
+    cwdFiles = getFiles('.')
+    # Getting a list of the unique files in the three directories
+    uniqueFiles = sorted(list(set(indexFiles + cwdFiles + list(commitFiles.keys()))))
+    for file in uniqueFiles:
+        cwdPath = file if os.path.exists(file) else None
+        indexPath = f"{currState}/{file}" if file in indexFiles else None
+        commitPath = None if not commitFiles.get(file) else commitFiles.get(file)
+        # print(f"{file} + {cwdPath} + {indexPath} + {commitPath}")
+        status = determineStatus(cwdPath, indexPath, commitPath)
+        print(f"{file} - " + ', '.join(status))

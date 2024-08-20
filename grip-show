@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+
+import sys
+import os
+import re
+from helpers import verifyGrip, fetchGenInfo, getCommits, eprint
+
+# grip-show is my implementation of the grip-show command.
+# Edwin Tang (z5482091)
+# Implementation ===============================================================
+
+grip = '.grip'
+currState = '.grip/curr'
+commitDir = '.grip/commits'
+
+
+if __name__ == "__main__":
+    # Verifying that grip directory exists
+    verifyGrip(sys.argv[0])
+    currBranch = fetchGenInfo()
+    # Verifying that there is one argument and argument format
+    if len(sys.argv) != 2 or not re.search("^.*:.*$", sys.argv[1]):
+        print("usage: grip-show <commit>:<filename>", file=sys.stderr)
+        sys.exit(1)
+    commitNo = re.search(r'^(.*):', sys.argv[1]).group(1)
+    unconvertedCommitNo = commitNo
+    filename = re.search(r'^.*:(.*)', sys.argv[1]).group(1)
+    if commitNo == '':
+        searchDir = currState
+        commitNo = "index"
+    elif not re.search(r"^\d+$", commitNo):
+        eprint(sys.argv[0], f"unknown commit '{commitNo}'")
+        sys.exit(1)
+    else:
+        commitNo = int(commitNo)
+        commits = [f for f in getCommits(commitDir) if os.path.basename(f) == str(commitNo)]
+        if len(commits) == 0:
+            eprint(sys.argv[0], f"unknown commit '{commitNo}'")
+            sys.exit(1)
+        searchDir = f"{commitDir}/{commits[0]}"
+    if not re.search("^[a-zA-Z0-9][-a-zA-Z0-9\._]*$", filename):
+        eprint(sys.argv[0], f"invalid filename '{filename}'")
+        sys.exit(1)
+    if not os.path.exists(f"{searchDir}/{filename}"):
+        if commitNo != "index":
+            commitNo = f"commit {unconvertedCommitNo}"
+        eprint(sys.argv[0], f"'{filename}' not found in {commitNo}")
+        sys.exit(1)
+    with open(f"{searchDir}/{filename}", "r") as f:
+        print(f.read(), end="")

@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+
+import sys
+import os
+import filecmp
+import re
+from helpers import verifyGrip, fetchGenInfo, eprint, getDir, ArgumentParser, getCommits
+
+# grip-merge is my implementation of the grip-merge command.
+# Edwin Tang (z5482091)
+# Implementation ===============================================================
+
+commitDir = '.grip/commits'
+currState = '.grip/curr'
+
+
+if __name__ == "__main__":
+    # Verifying that grip directory exists
+    verifyGrip(sys.argv[0])
+    currBranch = fetchGenInfo()
+    branches = sorted(getDir(commitDir))
+    if len(branches) == 0:
+        eprint(sys.argv[0], f"this command can not be run until after the first commit")
+        sys.exit(1)
+    # Parsing arguments
+    parser = ArgumentParser(usage="%(prog)s <branch|commit> -m message", add_help=False)
+    parser.add_argument('bORc')
+    parser.add_argument('-m')
+    arguments = parser.parse_args()
+    if arguments.m is None or re.search(r"^\s*$", arguments.m):
+        eprint(sys.argv[0], f"empty commit message")
+        sys.exit(1)
+    currLatestCommit = currBranch + '/' + sorted(getDir(currBranch), reverse=True)[0]
+    if re.search(r"^\d+$", arguments.bORc):
+        if not os.path.exists(f"{currBranch}/{int(arguments.bORc)}"):
+            eprint(sys.argv[0], f"unknown commit '{arguments.bORc}'")
+            sys.exit(1)
+        commitToBeMerged = f"{currBranch}/{int(arguments.bORc)}"
+    else:
+        if arguments.bORc not in branches:
+            eprint(sys.argv[0], f"unknown branch '{arguments.bORc}'")
+            sys.exit(1)
+        latestCommit = sorted(getDir(f"{commitDir}/{arguments.bORc}"), reverse=True)[0]
+        commitToBeMerged = f"{commitDir}/{arguments.bORc}/{latestCommit}"
+        # UH SOME FAST FORWARD STUFF IDK T^T
+    diffObject = filecmp.dircmp(commitToBeMerged, currLatestCommit, ignore=['_MESSAGE_'])
+    if len(diffObject.diff_files) != 0:
+        eprint(sys.argv[0], f"These files can not be merged:")
+        for i in diffObject.diff_files:
+            print(i, file=sys.stderr)
+        sys.exit(1)
+    else:
+        # Figuring out commit number
+        files = list(map(lambda x: os.path.basename(x), getCommits(commitDir)))
+        files = list(set(files))
+        newCommitPath = f"{currBranch}/{str(len(files))}"
+
